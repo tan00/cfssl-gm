@@ -1,0 +1,18 @@
+{
+	"hosts": [
+		"ca.zcw.com"
+	],
+	"key": {
+		"algo": "ecdsa",
+		"size": 256
+	},
+	"names": [
+		{
+			"C": "US",
+			"L": "San Francisco",
+			"O": "Internet Widgets, LLC",
+			"OU": "Certificate Authority",
+			"ST": "California"
+		}
+	]
+}
