@@ -12,8 +12,10 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"unsafe"
 
 	cferr "github.com/cloudflare/cfssl/errors"
+	"github.com/cloudflare/cfssl/gmsm/sm2"
 	"github.com/cloudflare/cfssl/log"
 )
 
@@ -42,7 +44,7 @@ type KeyRequest struct {
 // The DefaultKeyRequest is used when no key request data is provided
 // in the request. This should be a safe default.
 var DefaultKeyRequest = KeyRequest{
-	Algo: "ecdsa",
+	Algo: "sm2",
 	Size: curveP256,
 }
 
@@ -69,9 +71,11 @@ func (kr *KeyRequest) Generate() (interface{}, error) {
 			return nil, errors.New("invalid curve")
 		}
 		return ecdsa.GenerateKey(curve, rand.Reader)
-		//todo
-	case "sm2":
-		return nil, errors.New("sm2 not implment")
+
+	case "sm2": //todo
+		priv, err := sm2.GenerateKey() // 生成密钥对
+		return priv, err
+
 	default:
 		return nil, errors.New("invalid algorithm")
 	}
@@ -103,6 +107,10 @@ func (kr *KeyRequest) SigAlgo() x509.SignatureAlgorithm {
 		default:
 			return x509.ECDSAWithSHA1
 		}
+
+	case "sm2": //todo
+		return x509.ECDSAWithSHA1
+
 	default:
 		return x509.UnknownSignatureAlgorithm
 	}
@@ -168,6 +176,7 @@ func ParseRequest(req *CertificateRequest) (csr, key []byte, err error) {
 		return
 	}
 
+	//编码私钥
 	switch priv := priv.(type) {
 	case *rsa.PrivateKey:
 		key = x509.MarshalPKCS1PrivateKey(priv)
@@ -187,6 +196,19 @@ func ParseRequest(req *CertificateRequest) (csr, key []byte, err error) {
 			Bytes: key,
 		}
 		key = pem.EncodeToMemory(&block)
+
+	case *sm2.PrivateKey:
+		key, err = sm2.MarshalSm2PrivateKey(priv, nil)
+		if err != nil {
+			err = cferr.Wrap(cferr.PrivateKeyError, cferr.Unknown, err)
+			return
+		}
+		block := pem.Block{
+			Type:  "EC PRIVATE KEY",
+			Bytes: key,
+		}
+		key = pem.EncodeToMemory(&block)
+
 	default:
 		panic("Generate should have failed to produce a valid key.")
 	}
@@ -204,12 +226,19 @@ func ParseRequest(req *CertificateRequest) (csr, key []byte, err error) {
 		}
 	}
 
-	csr, err = x509.CreateCertificateRequest(rand.Reader, &tpl, priv)
+	//生成证书请求
+	switch priv := priv.(type) {
+	case *sm2.PrivateKey:
+		csr, err = sm2.CreateCertificateRequest(rand.Reader, (*sm2.CertificateRequest)(unsafe.Pointer(&tpl)), priv)
+	default:
+		csr, err = x509.CreateCertificateRequest(rand.Reader, &tpl, priv)
+	}
 	if err != nil {
 		log.Errorf("failed to generate a CSR: %v", err)
 		err = cferr.Wrap(cferr.CSRError, cferr.BadRequest, err)
 		return
 	}
+
 	block := pem.Block{
 		Type:  "CERTIFICATE REQUEST",
 		Bytes: csr,

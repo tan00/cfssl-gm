@@ -9,12 +9,14 @@ import (
 	"testing"
 
 	"github.com/cloudflare/cfssl/errors"
+	"github.com/cloudflare/cfssl/gmsm/sm2"
 )
 
 // TestKeyRequest ensures that key generation returns the same type of
 // key specified in the KeyRequest.
 func TestKeyRequest(t *testing.T) {
-	var kr = &KeyRequest{"ecdsa", 256}
+	//var kr = &KeyRequest{"ecdsa", 256}
+	var kr = &KeyRequest{"sm2", 256}
 
 	priv, err := kr.Generate()
 	if err != nil {
@@ -30,13 +32,18 @@ func TestKeyRequest(t *testing.T) {
 		if kr.Algo != "ecdsa" {
 			t.Fatal("ECDSA key generated, but expected", kr.Algo)
 		}
+	case *sm2.PrivateKey:
+		if kr.Algo != "sm2" {
+			t.Fatal("sm2 key generated, but expected", kr.Algo)
+		}
 	}
+
 }
 
 // TestPKIXName validates building a pkix.Name structure from a
 // CertificateRequest.
 func TestPKIXName(t *testing.T) {
-	var kr = KeyRequest{"ecdsa", 256}
+	var kr = KeyRequest{"sm2", 256}
 	var cr = &CertificateRequest{
 		CN: "Test Common Name",
 		Names: []Name{
@@ -78,7 +85,7 @@ func TestPKIXName(t *testing.T) {
 // TestParseRequest ensures that a valid certificate request does not
 // error.
 func TestParseRequest(t *testing.T) {
-	var kr = KeyRequest{"ecdsa", 256}
+	var kr = KeyRequest{"sm2", 256}
 	var cr = &CertificateRequest{
 		CN: "Test Common Name",
 		Names: []Name{
@@ -221,7 +228,7 @@ func TestDefaultKeyRequest(t *testing.T) {
 			t.Fatal("Invalid default key request.")
 		}
 	case "EC PRIVATE KEY":
-		if DefaultKeyRequest.Algo != "ecdsa" {
+		if DefaultKeyRequest.Algo != "ecdsa" && DefaultKeyRequest.Algo != "sm2" {
 			t.Fatal("Invalid default key request.")
 		}
 	}

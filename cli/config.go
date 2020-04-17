@@ -67,7 +67,7 @@ func registerFlags(c *Config, f *flag.FlagSet) {
 	f.StringVar(&c.IntermediatesFile, "intermediates", "", "intermediate certs")
 	f.StringVar(&c.CABundleFile, "ca-bundle", "", "Bundle to be used for root certificates pool")
 	f.StringVar(&c.IntBundleFile, "int-bundle", "", "Bundle to be used for intermediate certificates pool")
-	//todo  改为 127.0.0.1, 使用0.0.0.0 是为了方便调试
+	//todo  需改为 127.0.0.1, 使用0.0.0.0 是为了方便调试
 	f.StringVar(&c.Address, "address", "0.0.0.0", "Address to bind")
 	f.IntVar(&c.Port, "port", 8888, "Port to bind")
 	f.StringVar(&c.ConfigFile, "config", "", "path to configuration file")
