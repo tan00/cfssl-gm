@@ -46,6 +46,7 @@ var (
 
 var errBadSigner = errors.New("signer not initialized")
 
+//v1Endpoints 定义api接口
 var v1Endpoints = map[string]func() (http.Handler, error){
 	"sign": func() (http.Handler, error) {
 		if s == nil {

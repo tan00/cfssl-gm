@@ -16,10 +16,9 @@ import (
 // and remote address.
 type AuthenticatedRequest struct {
 	// An Authenticator decides whether to use this field.
-	Timestamp     int64  `json:"timestamp,omitempty"`
-	RemoteAddress []byte `json:"remote_address,omitempty"`
-	Token         []byte `json:"token"`
-	Request       []byte `json:"request"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	Token     []byte `json:"token"`
+	Request   []byte `json:"request"`
 }
 
 // A Provider can generate tokens from a request and verify a

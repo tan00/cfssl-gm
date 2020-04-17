@@ -5,7 +5,7 @@ export GOFLAGS := -mod=vendor
 export GOPROXY := off
 
 .PHONY: all
-all: bin/cfssl  bin/cfssljson bin/mkbundle bin/multirootca
+all: bin/cfssl  bin/cfssljson bin/mkbundle 
 
 bin/%: $(shell find . -type f -name '*.go')
 	@mkdir -p $(dir $@)

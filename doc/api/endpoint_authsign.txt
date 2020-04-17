@@ -15,7 +15,7 @@ Optional parameters:
     as part of the authentication process.
 
     * timestamp: a Unix timestamp
-    * remote_address: an address used in making the request.
+
 
 Result:
 

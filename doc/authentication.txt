@@ -17,9 +17,7 @@ An authenticated request has the following fields:
    * timestamp: an optional field containing a Unix timestamp. This
      might be used by an authentication provider; the standard
      authenticator does not use this.
-   * remote_address: an optional field containing the address or
-     hostname of the server; this may be used by an authentication
-     provider. The standard authenticator does not use this field.
+
 
 The standard authenticator provided as a reference implementation uses
 HMAC-SHA-256 to compute the HMAC of the request, with the hex-encoded
