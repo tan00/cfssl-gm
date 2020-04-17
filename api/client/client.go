@@ -136,10 +136,10 @@ func (srv *server) authReq(req, ID []byte, provider auth.Provider, target string
 	}
 
 	aReq := &auth.AuthenticatedRequest{
-		Timestamp:     time.Now().Unix(),
-		RemoteAddress: ID,
-		Token:         token,
-		Request:       req,
+		Timestamp: time.Now().Unix(),
+		//RemoteAddress: ID,
+		Token:   token,
+		Request: req,
 	}
 
 	jsonData, err := json.Marshal(aReq)

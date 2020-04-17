@@ -69,6 +69,9 @@ func (kr *KeyRequest) Generate() (interface{}, error) {
 			return nil, errors.New("invalid curve")
 		}
 		return ecdsa.GenerateKey(curve, rand.Reader)
+		//todo
+	case "sm2":
+		return nil, errors.New("sm2 not implment")
 	default:
 		return nil, errors.New("invalid algorithm")
 	}
