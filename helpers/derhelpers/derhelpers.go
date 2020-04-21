@@ -9,11 +9,19 @@ import (
 	"crypto/x509"
 
 	cferr "github.com/cloudflare/cfssl/errors"
+	"github.com/cloudflare/cfssl/gmsm/sm2"
 )
 
 // ParsePrivateKeyDER parses a PKCS #1, PKCS #8, or elliptic curve
 // DER-encoded private key. The key must not be in PEM format.
 func ParsePrivateKeyDER(keyDER []byte) (key crypto.Signer, err error) {
+	//如果是sm2 调用sm2的解析函数
+	sm2Key, err := sm2.ParsePKCS8PrivateKey(keyDER, nil)
+	if err == nil {
+		return sm2Key, nil
+	}
+
+	//原有流程
 	generalKey, err := x509.ParsePKCS8PrivateKey(keyDER)
 	if err != nil {
 		generalKey, err = x509.ParsePKCS1PrivateKey(keyDER)

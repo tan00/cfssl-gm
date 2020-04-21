@@ -39,10 +39,12 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"reflect"
 	"strconv"
 	"time"
 
 	"github.com/cloudflare/cfssl/gmsm/sm3"
+	"github.com/cloudflare/cfssl/log"
 	"golang.org/x/crypto/ripemd160"
 	"golang.org/x/crypto/sha3"
 )
@@ -120,6 +122,7 @@ func marshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorith
 		}
 		publicKeyAlgorithm.Parameters.FullBytes = paramBytes
 	default:
+		log.Errorf("in marshalPublicKey pubkey type = %s", reflect.TypeOf(pub))
 		return nil, pkix.AlgorithmIdentifier{}, errors.New("x509: only RSA and ECDSA(SM2) public keys supported")
 	}
 
@@ -544,6 +547,7 @@ func rsaPSSParameters(hashFunc Hash) asn1.RawValue {
 	return asn1.RawValue{FullBytes: serialized}
 }
 
+//getSignatureAlgorithmFromAI  AI = AlgorithmIdentifier
 func getSignatureAlgorithmFromAI(ai pkix.AlgorithmIdentifier) SignatureAlgorithm {
 	if !ai.Algorithm.Equal(oidSignatureRSAPSS) {
 		for _, details := range signatureAlgorithmDetails {

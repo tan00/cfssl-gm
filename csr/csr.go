@@ -72,8 +72,8 @@ func (kr *KeyRequest) Generate() (interface{}, error) {
 		}
 		return ecdsa.GenerateKey(curve, rand.Reader)
 
-	case "sm2": //todo
-		priv, err := sm2.GenerateKey() // 生成密钥对
+	case "sm2": //add sm2
+		priv, err := sm2.GenerateKey()
 		return priv, err
 
 	default:
@@ -108,8 +108,8 @@ func (kr *KeyRequest) SigAlgo() x509.SignatureAlgorithm {
 			return x509.ECDSAWithSHA1
 		}
 
-	case "sm2": //todo
-		return x509.ECDSAWithSHA1
+	case "sm2": //add sm2
+		return x509.SignatureAlgorithm(sm2.SM2WithSM3)
 
 	default:
 		return x509.UnknownSignatureAlgorithm

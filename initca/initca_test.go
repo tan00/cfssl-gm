@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
+	"github.com/cloudflare/cfssl/gmsm/sm2"
 	"github.com/cloudflare/cfssl/helpers"
 	"github.com/cloudflare/cfssl/signer"
 	"github.com/cloudflare/cfssl/signer/local"
@@ -45,6 +47,10 @@ var validKeyParams = []KeyRequest{
 		keyAlgo: "ecdsa",
 		keyLen:  521,
 	},
+	{
+		keyAlgo: "sm2",
+		keyLen:  256,
+	},
 }
 
 var csrFiles = []string{
@@ -54,6 +60,7 @@ var csrFiles = []string{
 	"testdata/ecdsa256.csr",
 	"testdata/ecdsa384.csr",
 	"testdata/ecdsa521.csr",
+	"testdata/sm2.csr",
 }
 var invalidCryptoParams = []KeyRequest{
 	// Weak Key
@@ -133,10 +140,20 @@ func TestInitCA(t *testing.T) {
 				CA:           true,
 			},
 		}
-		s, err := local.NewSigner(key, cert, signer.DefaultSigAlgo(key), nil)
-		if err != nil {
-			t.Fatal("Signer Creation error:", err)
+
+		var s signer.Signer
+		if req.KeyRequest.Algo == "sm2" {
+			s, err = local.NewSignerSM2(key, (*sm2.Certificate)(unsafe.Pointer(cert)), signer.SignerAlgoSM2(key), nil)
+			if err != nil {
+				t.Fatal("Signer Creation error:", err)
+			}
+		} else {
+			s, err = local.NewSigner(key, cert, signer.DefaultSigAlgo(key), nil)
+			if err != nil {
+				t.Fatal("Signer Creation error:", err)
+			}
 		}
+
 		s.SetPolicy(CAPolicy)
 
 		// Sign RSA and ECDSA customer CSRs.
@@ -160,7 +177,10 @@ func TestInitCA(t *testing.T) {
 			if customerCert.SignatureAlgorithm != s.SigAlgo() {
 				t.Fatal("Signature Algorithm mismatch")
 			}
-			err = customerCert.CheckSignatureFrom(cert)
+
+			sm2cert := (*sm2.Certificate)(unsafe.Pointer(customerCert))
+
+			err = sm2cert.CheckSignatureFrom((*sm2.Certificate)(unsafe.Pointer(cert)))
 			if err != nil {
 				t.Fatal("Signing CSR failed.", err)
 			}

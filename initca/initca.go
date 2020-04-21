@@ -12,10 +12,12 @@ import (
 	"errors"
 	"io/ioutil"
 	"time"
+	"unsafe"
 
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
 	cferr "github.com/cloudflare/cfssl/errors"
+	"github.com/cloudflare/cfssl/gmsm/sm2"
 	"github.com/cloudflare/cfssl/helpers"
 	"github.com/cloudflare/cfssl/log"
 	"github.com/cloudflare/cfssl/signer"
@@ -70,15 +72,28 @@ func New(req *csr.CertificateRequest) (cert, csrPEM, key []byte, err error) {
 		return
 	}
 
-	s, err := local.NewSigner(priv, nil, signer.DefaultSigAlgo(priv), nil)
-	if err != nil {
-		log.Errorf("failed to create signer: %v", err)
-		return
-	}
-	s.SetPolicy(CAPolicy)
+	if req.KeyRequest.Algo == "sm2" {
+		var s *local.SignerSM2
+		s, err = local.NewSignerSM2(priv, nil, signer.SignerAlgoSM2(priv), nil)
+		if err != nil {
+			log.Errorf("failed to create signer: %v", err)
+			return
+		}
+		s.SetPolicy(CAPolicy)
+		signReq := signer.SignRequest{Hosts: req.Hosts, Request: string(csrPEM)}
+		cert, err = s.Sign(signReq)
+	} else {
+		var s *local.Signer
+		s, err = local.NewSigner(priv, nil, signer.DefaultSigAlgo(priv), nil)
+		if err != nil {
+			log.Errorf("failed to create signer: %v", err)
+			return
+		}
+		s.SetPolicy(CAPolicy)
 
-	signReq := signer.SignRequest{Hosts: req.Hosts, Request: string(csrPEM)}
-	cert, err = s.Sign(signReq)
+		signReq := signer.SignRequest{Hosts: req.Hosts, Request: string(csrPEM)}
+		cert, err = s.Sign(signReq)
+	}
 
 	return
 
@@ -86,6 +101,7 @@ func New(req *csr.CertificateRequest) (cert, csrPEM, key []byte, err error) {
 
 // NewFromPEM creates a new root certificate from the key file passed in.
 func NewFromPEM(req *csr.CertificateRequest, keyFile string) (cert, csrPEM []byte, err error) {
+	var isSM2 = false
 	if req.CA != nil {
 		if req.CA.Expiry != "" {
 			CAPolicy.Default.ExpiryString = req.CA.Expiry
@@ -132,6 +148,11 @@ func NewFromPEM(req *csr.CertificateRequest, keyFile string) (cert, csrPEM []byt
 		default:
 			sigAlgo = x509.ECDSAWithSHA1
 		}
+
+	case *sm2.PrivateKey: //add sm2
+		isSM2 = true
+		sigAlgo = x509.SignatureAlgorithm(sm2.SM2WithSM3)
+
 	default:
 		sigAlgo = x509.UnknownSignatureAlgorithm
 	}
@@ -142,7 +163,12 @@ func NewFromPEM(req *csr.CertificateRequest, keyFile string) (cert, csrPEM []byt
 		DNSNames:           req.Hosts,
 	}
 
-	csrPEM, err = x509.CreateCertificateRequest(rand.Reader, &tpl, priv)
+	if isSM2 {
+		csrPEM, err = sm2.CreateCertificateRequest(rand.Reader, (*sm2.CertificateRequest)(unsafe.Pointer(&tpl)), priv)
+	} else {
+		csrPEM, err = x509.CreateCertificateRequest(rand.Reader, &tpl, priv)
+	}
+
 	if err != nil {
 		log.Errorf("failed to generate a CSR: %v", err)
 		// The use of CertificateError was a matter of some

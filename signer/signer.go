@@ -13,14 +13,18 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
+	"hash"
 	"math"
 	"math/big"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
 	cferr "github.com/cloudflare/cfssl/errors"
+	"github.com/cloudflare/cfssl/gmsm/sm2"
+	"github.com/cloudflare/cfssl/gmsm/sm3"
 	"github.com/cloudflare/cfssl/info"
 )
 
@@ -138,6 +142,21 @@ func DefaultSigAlgo(priv crypto.Signer) x509.SignatureAlgorithm {
 	}
 }
 
+func SignerAlgoSM2(priv crypto.Signer) sm2.SignatureAlgorithm {
+	return sm2.SM2WithSM3
+	// switch pub := priv.Public().(type) {
+	// case *sm2.PublicKey:
+	// 	switch pub.Curve {
+	// 	case sm2.P256Sm2():
+	// 		return sm2.SM2WithSHA256
+	// 	default:
+	// 		return sm2.SM2WithSHA1
+	// 	}
+	// default:
+	// 	return sm2.UnknownSignatureAlgorithm
+	// }
+}
+
 // ParseCertificateRequest takes an incoming certificate request and
 // builds a certificate template from it.
 func ParseCertificateRequest(s Signer, csrBytes []byte) (template *x509.Certificate, err error) {
@@ -161,7 +180,32 @@ func ParseCertificateRequest(s Signer, csrBytes []byte) (template *x509.Certific
 		DNSNames:           csr.DNSNames,
 		IPAddresses:        csr.IPAddresses,
 	}
+	return
+}
 
+// ParseCertificateRequestSM2 takes an incoming certificate request and
+// builds a certificate template from it.
+func ParseCertificateRequestSM2(s Signer, csrBytes []byte) (template *sm2.Certificate, err error) {
+	csr, err := sm2.ParseCertificateRequest(csrBytes)
+	if err != nil {
+		err = cferr.Wrap(cferr.CSRError, cferr.ParseFailed, err)
+		return
+	}
+
+	err = csr.CheckSignature()
+	if err != nil {
+		err = cferr.Wrap(cferr.CSRError, cferr.KeyMismatch, err)
+		return
+	}
+
+	template = &sm2.Certificate{
+		Subject:            csr.Subject,
+		PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
+		PublicKey:          csr.PublicKey,
+		SignatureAlgorithm: csr.SignatureAlgorithm,
+		DNSNames:           csr.DNSNames,
+		IPAddresses:        csr.IPAddresses,
+	}
 	return
 }
 
@@ -210,6 +254,59 @@ func CheckSignature(csr *x509.CertificateRequest, algo x509.SignatureAlgorithm, 
 	return x509.ErrUnsupportedAlgorithm
 }
 
+// CheckSignatureSM2 verifies a signature made by the key on a CSR, such
+// as on the CSR itself.
+func CheckSignatureSM2(csr *sm2.CertificateRequest, algo sm2.SignatureAlgorithm, signed, signature []byte) error {
+	var hashType crypto.Hash
+	var h hash.Hash
+
+	switch algo {
+	case sm2.SM2WithSHA1:
+		hashType = crypto.SHA1
+		h = hashType.New()
+	case sm2.SM2WithSHA256:
+		hashType = crypto.SHA256
+		h = hashType.New()
+	case sm2.SM2WithSM3:
+		hashType = crypto.Hash(sm2.SM3)
+		h = sm3.New()
+
+	default:
+		return x509.ErrUnsupportedAlgorithm
+	}
+
+	h.Write(signed)
+	digest := h.Sum(nil)
+
+	switch pub := csr.PublicKey.(type) {
+	case *rsa.PublicKey:
+		return rsa.VerifyPKCS1v15(pub, hashType, digest, signature)
+	case *ecdsa.PublicKey:
+		ecdsaSig := new(struct{ R, S *big.Int })
+		if _, err := asn1.Unmarshal(signature, ecdsaSig); err != nil {
+			return err
+		}
+
+		if !sm2.Verify((*sm2.PublicKey)(unsafe.Pointer(pub)), digest, ecdsaSig.R, ecdsaSig.S) {
+			return errors.New("x509: ECDSA verification failure")
+		}
+		return nil
+		// case *sm2.PublicKey:
+		// 	ecdsaSig := new(struct{ R, S *big.Int })
+		// 	if _, err := asn1.Unmarshal(signature, ecdsaSig); err != nil {
+		// 		return err
+		// 	}
+		// 	if ecdsaSig.R.Sign() <= 0 || ecdsaSig.S.Sign() <= 0 {
+		// 		return errors.New("x509: ECDSA signature contained zero or negative values")
+		// 	}
+		// 	if !sm2.Verify(pub, digest, ecdsaSig.R, ecdsaSig.S) {
+		// 		return errors.New("x509: ECDSA verification failure")
+		// 	}
+		// 	return nil
+	}
+	return x509.ErrUnsupportedAlgorithm
+}
+
 type subjectPublicKeyInfo struct {
 	Algorithm        pkix.AlgorithmIdentifier
 	SubjectPublicKey asn1.BitString
@@ -220,7 +317,7 @@ type subjectPublicKeyInfo struct {
 // SubjectPublicKeyInfo component of the certificate.
 func ComputeSKI(template *x509.Certificate) ([]byte, error) {
 	pub := template.PublicKey
-	encodedPub, err := x509.MarshalPKIXPublicKey(pub)
+	encodedPub, err := sm2.MarshalPKIXPublicKey(pub)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +335,7 @@ func ComputeSKI(template *x509.Certificate) ([]byte, error) {
 // FillTemplate is a utility function that tries to load as much of
 // the certificate template as possible from the profiles and current
 // template. It fills in the key uses, expiration, revocation URLs,
-// serial number, and SKI.
+// serial number, and SKI.   SKI=
 func FillTemplate(template *x509.Certificate, defaultProfile, profile *config.SigningProfile, serialSeq string) error {
 	ski, err := ComputeSKI(template)
 

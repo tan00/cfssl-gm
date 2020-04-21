@@ -10,6 +10,8 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"unsafe"
+
 	//"fmt"
 	"strings"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/cloudflare/cfssl/crypto/pkcs12"
 	"github.com/cloudflare/cfssl/crypto/pkcs7"
 	cferr "github.com/cloudflare/cfssl/errors"
+	"github.com/cloudflare/cfssl/gmsm/sm2"
 	"github.com/cloudflare/cfssl/helpers/derhelpers"
 	"github.com/cloudflare/cfssl/log"
 )
@@ -267,7 +270,7 @@ func ParseOneCertificateFromPEM(certsPEM []byte) ([]*x509.Certificate, []byte, e
 		return nil, rest, nil
 	}
 
-	cert, err := x509.ParseCertificate(block.Bytes)
+	cert, err := sm2.ParseCertificate(block.Bytes)
 	if err != nil {
 		pkcs7data, err := pkcs7.ParsePKCS7(block.Bytes)
 		if err != nil {
@@ -282,7 +285,7 @@ func ParseOneCertificateFromPEM(certsPEM []byte) ([]*x509.Certificate, []byte, e
 		}
 		return certs, rest, nil
 	}
-	var certs = []*x509.Certificate{cert}
+	var certs = []*x509.Certificate{(*x509.Certificate)(unsafe.Pointer(cert))}
 	return certs, rest, nil
 }
 
