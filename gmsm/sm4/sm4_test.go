@@ -48,8 +48,8 @@ func TestSM4(t *testing.T) {
 	}
 }
 
-func BenchmarkSM4(t *testing.B) {
-	t.ReportAllocs()
+func TestSM4Per(t *testing.T) {
+
 	key := []byte("1234567890abcdef")
 	data := []byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10}
 	WriteKeyToPem("key.pem", key, nil)
@@ -62,12 +62,18 @@ func BenchmarkSM4(t *testing.B) {
 		log.Fatal(err)
 	}
 
-	for i := 0; i < t.N; i++ {
-		d0 := make([]byte, 16)
-		c.Encrypt(d0, data)
-		d1 := make([]byte, 16)
-		c.Decrypt(d1, d0)
+	fn := func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			d0 := make([]byte, 4096)
+			c.Encrypt(d0, data)
+		}
 	}
+	r := testing.Benchmark(fn)
+
+	t.Logf("%f MBps \n", (float64(4096)*float64(r.N)/1e6)/r.T.Seconds())
+
+	t.Logf("benchmark result %s\n", r.String())
+
 }
 
 func TestErrKeyLen(t *testing.T) {

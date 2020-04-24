@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"io/ioutil"
+	"log"
 	"strings"
 	"testing"
 	"time"
@@ -23,30 +24,30 @@ type KeyRequest struct {
 }
 
 var validKeyParams = []KeyRequest{
-	{
-		keyAlgo: "rsa",
-		keyLen:  2048,
-	},
-	{
-		keyAlgo: "rsa",
-		keyLen:  3072,
-	},
-	{
-		keyAlgo: "rsa",
-		keyLen:  4096,
-	},
-	{
-		keyAlgo: "ecdsa",
-		keyLen:  256,
-	},
-	{
-		keyAlgo: "ecdsa",
-		keyLen:  384,
-	},
-	{
-		keyAlgo: "ecdsa",
-		keyLen:  521,
-	},
+	// {
+	// 	keyAlgo: "rsa",
+	// 	keyLen:  2048,
+	// },
+	// {
+	// 	keyAlgo: "rsa",
+	// 	keyLen:  3072,
+	// },
+	// {
+	// 	keyAlgo: "rsa",
+	// 	keyLen:  4096,
+	// },
+	// {
+	// 	keyAlgo: "ecdsa",
+	// 	keyLen:  256,
+	// },
+	// {
+	// 	keyAlgo: "ecdsa",
+	// 	keyLen:  384,
+	// },
+	// {
+	// 	keyAlgo: "ecdsa",
+	// 	keyLen:  521,
+	// },
 	{
 		keyAlgo: "sm2",
 		keyLen:  256,
@@ -54,12 +55,12 @@ var validKeyParams = []KeyRequest{
 }
 
 var csrFiles = []string{
-	"testdata/rsa2048.csr",
-	"testdata/rsa3072.csr",
-	"testdata/rsa4096.csr",
-	"testdata/ecdsa256.csr",
-	"testdata/ecdsa384.csr",
-	"testdata/ecdsa521.csr",
+	// "testdata/rsa2048.csr",
+	// "testdata/rsa3072.csr",
+	// "testdata/rsa4096.csr",
+	// "testdata/ecdsa256.csr",
+	// "testdata/ecdsa384.csr",
+	// "testdata/ecdsa521.csr",
 	"testdata/sm2.csr",
 }
 var invalidCryptoParams = []KeyRequest{
@@ -77,6 +78,119 @@ var invalidCryptoParams = []KeyRequest{
 		keyAlgo: "ecdsa",
 		keyLen:  2000,
 	},
+}
+
+func TestCsrCheck(t *testing.T) {
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
+	var req *csr.CertificateRequest
+	hostname := "cloudflare.com"
+	for _, param := range validKeyParams {
+		req = &csr.CertificateRequest{
+			Names: []csr.Name{
+				{
+					C:  "US",
+					ST: "California",
+					L:  "San Francisco",
+					O:  "CloudFlare",
+					OU: "Systems Engineering",
+				},
+			},
+			CN:    hostname,
+			Hosts: []string{hostname, "www." + hostname},
+			KeyRequest: &csr.KeyRequest{
+				Algo: param.keyAlgo,
+				Size: param.keyLen,
+			},
+		}
+		//生成ca根证书
+		certBytes, _, keyBytes, err := New(req)
+		if err != nil {
+			t.Fatal("InitCA failed:", err)
+		}
+
+		key, err := helpers.ParsePrivateKeyPEM(keyBytes)
+		if err != nil {
+			t.Fatal("InitCA private key parsing failed:", err)
+		}
+		cert, err := helpers.ParseCertificatePEM(certBytes)
+		if err != nil {
+			t.Fatal("InitCA cert parsing failed:", err)
+		}
+
+		// Verify key parameters.
+		switch req.KeyRequest.Algo {
+		case "rsa":
+			if cert.PublicKey.(*rsa.PublicKey).N.BitLen() != param.keyLen {
+				t.Fatal("Cert key length mismatch.")
+			}
+			if key.(*rsa.PrivateKey).N.BitLen() != param.keyLen {
+				t.Fatal("Private key length mismatch.")
+			}
+		case "ecdsa":
+			if cert.PublicKey.(*ecdsa.PublicKey).Curve.Params().BitSize != param.keyLen {
+				t.Fatal("Cert key length mismatch.")
+			}
+			if key.(*ecdsa.PrivateKey).Curve.Params().BitSize != param.keyLen {
+				t.Fatal("Private key length mismatch.")
+			}
+		}
+
+		// Start a signer
+		var CAPolicy = &config.Signing{
+			Default: &config.SigningProfile{
+				Usage:        []string{"cert sign", "crl sign"},
+				ExpiryString: "300s",
+				Expiry:       300 * time.Second,
+				CA:           true,
+			},
+		}
+
+		var s signer.Signer
+		if req.KeyRequest.Algo == "sm2" {
+			s, err = local.NewSignerSM2(key, (*sm2.Certificate)(unsafe.Pointer(cert)), signer.SignerAlgoSM2(key), nil)
+			if err != nil {
+				t.Fatal("Signer Creation error:", err)
+			}
+		} else {
+			s, err = local.NewSigner(key, cert, signer.DefaultSigAlgo(key), nil)
+			if err != nil {
+				t.Fatal("Signer Creation error:", err)
+			}
+		}
+
+		s.SetPolicy(CAPolicy)
+
+		// Sign RSA and ECDSA customer CSRs.
+		for _, csrFile := range csrFiles {
+			csrBytes, err := ioutil.ReadFile(csrFile)
+			if err != nil {
+				t.Fatal("CSR loading error:", err)
+			}
+			req := signer.SignRequest{
+				Request: string(csrBytes),
+				Hosts:   signer.SplitHosts(hostname),
+				Profile: "",
+				Label:   "",
+			}
+
+			bytes, err := s.Sign(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			customerCert, _ := helpers.ParseCertificatePEM(bytes)
+			if customerCert.SignatureAlgorithm != s.SigAlgo() {
+				t.Fatal("Signature Algorithm mismatch")
+			}
+
+			sm2cert := (*sm2.Certificate)(unsafe.Pointer(customerCert))
+
+			err = sm2cert.CheckSignatureFrom((*sm2.Certificate)(unsafe.Pointer(cert)))
+			if err != nil {
+				t.Fatal("Signing CSR failed.", err)
+			}
+		}
+
+	}
 }
 
 func TestInitCA(t *testing.T) {
@@ -104,6 +218,7 @@ func TestInitCA(t *testing.T) {
 		if err != nil {
 			t.Fatal("InitCA failed:", err)
 		}
+
 		key, err := helpers.ParsePrivateKeyPEM(keyBytes)
 		if err != nil {
 			t.Fatal("InitCA private key parsing failed:", err)

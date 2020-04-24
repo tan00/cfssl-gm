@@ -143,7 +143,8 @@ func DefaultSigAlgo(priv crypto.Signer) x509.SignatureAlgorithm {
 }
 
 func SignerAlgoSM2(priv crypto.Signer) sm2.SignatureAlgorithm {
-	return sm2.SM2WithSM3
+	return sm2.SM2WithSHA256
+	//return sm2.SM2WithSM3
 	// switch pub := priv.Public().(type) {
 	// case *sm2.PublicKey:
 	// 	switch pub.Curve {
@@ -291,18 +292,6 @@ func CheckSignatureSM2(csr *sm2.CertificateRequest, algo sm2.SignatureAlgorithm,
 			return errors.New("x509: ECDSA verification failure")
 		}
 		return nil
-		// case *sm2.PublicKey:
-		// 	ecdsaSig := new(struct{ R, S *big.Int })
-		// 	if _, err := asn1.Unmarshal(signature, ecdsaSig); err != nil {
-		// 		return err
-		// 	}
-		// 	if ecdsaSig.R.Sign() <= 0 || ecdsaSig.S.Sign() <= 0 {
-		// 		return errors.New("x509: ECDSA signature contained zero or negative values")
-		// 	}
-		// 	if !sm2.Verify(pub, digest, ecdsaSig.R, ecdsaSig.S) {
-		// 		return errors.New("x509: ECDSA verification failure")
-		// 	}
-		// 	return nil
 	}
 	return x509.ErrUnsupportedAlgorithm
 }

@@ -547,6 +547,27 @@ func rsaPSSParameters(hashFunc Hash) asn1.RawValue {
 	return asn1.RawValue{FullBytes: serialized}
 }
 
+//SM2ComputeZA 传入uid，计算sm2的za
+func SM2ComputeZA(uid []byte, pubkey interface{}) (za []byte, err error) {
+	var sm2pub PublicKey
+
+	switch pub := pubkey.(type) {
+	case *ecdsa.PublicKey:
+		sm2pub.Curve = pub.Curve
+		sm2pub.X = pub.X
+		sm2pub.Y = pub.Y
+	case *PublicKey:
+		sm2pub.Curve = pub.Curve
+		sm2pub.X = pub.X
+		sm2pub.Y = pub.Y
+	default:
+		log.Errorf("x509 type of key.Public() is %s ", reflect.TypeOf(pubkey))
+		err = errors.New("x509 in SM2ComputeZA type assert error")
+		return
+	}
+	return ZA(&sm2pub, uid)
+}
+
 //getSignatureAlgorithmFromAI  AI = AlgorithmIdentifier
 func getSignatureAlgorithmFromAI(ai pkix.AlgorithmIdentifier) SignatureAlgorithm {
 	if !ai.Algorithm.Equal(oidSignatureRSAPSS) {
@@ -1037,7 +1058,8 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
 				X:     pub.X,
 				Y:     pub.Y,
 			}
-			if !Sm2Verify(sm2pub, signed, nil, ecdsaSig.R, ecdsaSig.S) {
+			if !Sm2Verify(sm2pub, signed, default_uid, ecdsaSig.R, ecdsaSig.S) {
+				//if !Sm2Verify(sm2pub, signed, nil, ecdsaSig.R, ecdsaSig.S) {
 				return errors.New("x509: SM2 verification failure")
 			}
 		default:
@@ -1846,8 +1868,10 @@ func signingParamsForPublicKey(pub interface{}, requestedSigAlgo SignatureAlgori
 		pubType = ECDSA
 		switch pub.Curve {
 		case P256Sm2():
-			hashFunc = SM3
-			sigAlgo.Algorithm = oidSignatureSM2WithSM3
+			// hashFunc = SM3
+			// sigAlgo.Algorithm = oidSignatureSM2WithSM3
+			hashFunc = SHA256
+			sigAlgo.Algorithm = oidSignatureSM2WithSHA256
 		default:
 			err = errors.New("x509: unknown SM2 curve")
 		}
@@ -1962,11 +1986,12 @@ func CreateCertificate(rand io.Reader, template, parent *Certificate, pub, priv 
 	c.Raw = tbsCertContents
 
 	digest := tbsCertContents
+
+	h := hashFunc.New()
 	switch template.SignatureAlgorithm {
 	case SM2WithSM3, SM2WithSHA1, SM2WithSHA256:
 		break
 	default:
-		h := hashFunc.New()
 		h.Write(tbsCertContents)
 		digest = h.Sum(nil)
 	}
@@ -2356,11 +2381,12 @@ func CreateCertificateRequest(rand io.Reader, template *CertificateRequest, priv
 	tbsCSR.Raw = tbsCSRContents
 
 	digest := tbsCSRContents
+
+	h := hashFunc.New()
 	switch template.SignatureAlgorithm {
 	case SM2WithSM3, SM2WithSHA1, SM2WithSHA256:
-		break
+		break //Sign方法中计算了摘要这里不再计算
 	default:
-		h := hashFunc.New()
 		h.Write(tbsCSRContents)
 		digest = h.Sum(nil)
 	}

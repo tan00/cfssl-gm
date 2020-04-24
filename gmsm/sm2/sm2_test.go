@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -153,7 +154,7 @@ func TestSm2(t *testing.T) {
 		UnknownExtKeyUsage: testUnknownExtKeyUsage,
 
 		BasicConstraintsValid: true,
-		IsCA: true,
+		IsCA:                  true,
 
 		OCSPServer:            []string{"http://ocsp.example.com"},
 		IssuingCertificateURL: []string{"http://crt.example.com/ca1.crt"},
@@ -194,6 +195,52 @@ func TestSm2(t *testing.T) {
 		log.Fatal(err)
 	} else {
 		fmt.Printf("CheckSignature ok\n")
+	}
+}
+
+func TestSm2Sign(t *testing.T) {
+	var (
+		err     error
+		pubKey  *PublicKey
+		privKey *PrivateKey
+		ok      bool
+	)
+
+	msg := []byte("test")
+	privKey, err = ReadPrivateKeyFromPem("priv.pem", nil) // 读取密钥
+	if err != nil {
+		log.Fatal(err)
+	}
+	pubKey, err = ReadPublicKeyFromPem("pub.pem", nil) // 读取公钥
+	if err != nil {
+		log.Fatal(err)
+	}
+	msg, _ = ioutil.ReadFile("ifile") // 从文件读取数据
+
+	sign, err := privKey.Sign(rand.Reader, msg, nil) // 签名
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("x = %s \n\n", hex.EncodeToString(pubKey.X.Bytes()))
+	log.Printf("y = %s \n\n", hex.EncodeToString(pubKey.Y.Bytes()))
+	log.Printf("d = %s \n\n", hex.EncodeToString(privKey.D.Bytes()))
+	signature := sm2Signature{}
+	asn1.Unmarshal(sign, &signature)
+	log.Printf("sign r = %s \n\n", hex.EncodeToString(signature.R.Bytes()))
+	log.Printf("sign s = %s \n\n", hex.EncodeToString(signature.S.Bytes()))
+
+	err = ioutil.WriteFile("ofile", sign, os.FileMode(0644))
+	if err != nil {
+		log.Fatal(err)
+	}
+	signdata, _ := ioutil.ReadFile("ofile")
+
+	ok = pubKey.Verify(msg, signdata) // 公钥验证
+	if ok != true {
+		fmt.Printf("Verify error\n")
+	} else {
+		fmt.Printf("Verify ok\n")
 	}
 }
 

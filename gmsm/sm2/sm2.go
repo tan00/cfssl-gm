@@ -26,11 +26,13 @@ import (
 	"crypto/sha512"
 	"encoding/asn1"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"io"
 	"math/big"
 
 	"github.com/cloudflare/cfssl/gmsm/sm3"
+	"github.com/cloudflare/cfssl/log"
 )
 
 var (
@@ -76,8 +78,8 @@ func SignDataToSignDigit(sign []byte) (*big.Int, *big.Int, error) {
 
 // sign format = 30 + len(z) + 02 + len(r) + r + 02 + len(s) + s, z being what follows its size, ie 02+len(r)+r+02+len(s)+s
 func (priv *PrivateKey) Sign(rand io.Reader, msg []byte, opts crypto.SignerOpts) ([]byte, error) {
-	// r, s, err := Sign(priv, msg)
-	r, s, err := Sm2Sign(priv, msg, nil)
+	//r, s, err := Sm2Sign(priv, msg, nil)
+	r, s, err := Sm2Sign(priv, msg, default_uid)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +97,7 @@ func (pub *PublicKey) Verify(msg []byte, sign []byte) bool {
 	if err != nil {
 		return false
 	}
-	return Sm2Verify(pub, msg, nil, sm2Sign.R, sm2Sign.S)
+	return Sm2Verify(pub, msg, default_uid, sm2Sign.R, sm2Sign.S)
 	// return Verify(pub, msg, sm2Sign.R, sm2Sign.S)
 }
 
@@ -307,8 +309,91 @@ func Sm2Sign(priv *PrivateKey, msg, uid []byte) (r, s *big.Int, err error) {
 			break
 		}
 	}
+	log.Debugf("raw sign  = %s%s \n\n", string(hex.EncodeToString(r.Bytes())), hex.EncodeToString(s.Bytes()))
 	return
 }
+
+// func Add(x, y *big.Int) *big.Int {
+// 	var z big.Int
+// 	z.Add(x, y)
+// 	return &z
+// }
+
+// func Sub(x, y *big.Int) *big.Int {
+// 	var z big.Int
+// 	z.Sub(x, y)
+// 	return &z
+// }
+
+// func Mod(x, y *big.Int) *big.Int {
+// 	var z big.Int
+// 	z.Mod(x, y)
+// 	return &z
+// }
+
+// func ModInverse(x, y *big.Int) *big.Int {
+// 	var z big.Int
+// 	z.ModInverse(x, y)
+// 	return &z
+// }
+
+// func Mul(x, y *big.Int) *big.Int {
+// 	var z big.Int
+// 	z.Mul(x, y)
+// 	return &z
+// }
+
+// func Sm2Sign(priv *PrivateKey, in []byte, userId []byte) (r, s *big.Int, err error) {
+
+// 	za, err := ZA(&priv.PublicKey, userId)
+// 	if err != nil {
+// 		return nil, nil, err
+// 	}
+// 	e, err := msgHash(za, in)
+// 	if err != nil {
+// 		return nil, nil, err
+// 	}
+
+// 	//e := calculateE(digest, &priv.Curve, pubX, pubY, userId, in)
+
+// 	intZero := new(big.Int).SetInt64(0)
+// 	intOne := new(big.Int).SetInt64(1)
+// 	for {
+// 		var k *big.Int
+// 		//var err error
+// 		for {
+// 			// k, err = nextK(rand.Reader, priv.PublicKey.Curve.Params().N)
+// 			// if err != nil {
+// 			// 	return nil, nil, err
+// 			// }
+// 			//k, err = randFieldElement(priv.PublicKey.Curve, rand.Reader)
+// 			k = intOne
+// 			px, _ := priv.Curve.ScalarBaseMult(k.Bytes())
+// 			r = Add(e, px)
+// 			r = Mod(r, priv.PublicKey.Curve.Params().N)
+
+// 			rk := new(big.Int).Set(r)
+// 			rk = rk.Add(rk, k)
+// 			if r.Cmp(intZero) != 0 && rk.Cmp(priv.PublicKey.Curve.Params().N) != 0 {
+// 				break
+// 			}
+// 		}
+
+// 		dPlus1ModN := Add(priv.D, intOne)
+// 		dPlus1ModN = ModInverse(dPlus1ModN, priv.PublicKey.Curve.Params().N)
+// 		s = Mul(r, priv.D)
+// 		s = Sub(k, s)
+// 		s = Mod(s, priv.PublicKey.Curve.Params().N)
+// 		s = Mul(dPlus1ModN, s)
+// 		s = Mod(s, priv.PublicKey.Curve.Params().N)
+
+// 		if s.Cmp(intZero) != 0 {
+// 			break
+// 		}
+// 	}
+// 	log.Debugf("raw sign  = %s%s \n\n", string(hex.EncodeToString(r.Bytes())), hex.EncodeToString(s.Bytes()))
+// 	return r, s, nil
+// }
 
 func Sm2Verify(pub *PublicKey, msg, uid []byte, r, s *big.Int) bool {
 	c := pub.Curve
@@ -371,6 +456,12 @@ func msgHash(za, msg []byte) (*big.Int, error) {
 	e := sm3.New()
 	e.Write(za)
 	e.Write(msg)
+
+	//todel
+	log.Debugf("in msgHash  za= %v", hex.EncodeToString(za))
+	log.Debugf("in msgHash  msg= %v", hex.EncodeToString(msg))
+	log.Debugf("in msgHash  digest= %v", hex.EncodeToString(e.Sum(nil)[:32]))
+
 	return new(big.Int).SetBytes(e.Sum(nil)[:32]), nil
 }
 

@@ -109,7 +109,7 @@ func (kr *KeyRequest) SigAlgo() x509.SignatureAlgorithm {
 		}
 
 	case "sm2": //add sm2
-		return x509.SignatureAlgorithm(sm2.SM2WithSM3)
+		return x509.SignatureAlgorithm(sm2.SM2WithSHA256)
 
 	default:
 		return x509.UnknownSignatureAlgorithm

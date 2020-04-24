@@ -65,6 +65,8 @@ func New(req *csr.CertificateRequest) (cert, csrPEM, key []byte, err error) {
 		key = nil
 		return
 	}
+	//todel
+	log.Debugf("gen csr =  %s\n", string(csrPEM))
 
 	priv, err := helpers.ParsePrivateKeyPEM(key)
 	if err != nil {
@@ -81,6 +83,8 @@ func New(req *csr.CertificateRequest) (cert, csrPEM, key []byte, err error) {
 		}
 		s.SetPolicy(CAPolicy)
 		signReq := signer.SignRequest{Hosts: req.Hosts, Request: string(csrPEM)}
+		//todel
+		log.Debugf("before sign csr\n")
 		cert, err = s.Sign(signReq)
 	} else {
 		var s *local.Signer
@@ -151,7 +155,7 @@ func NewFromPEM(req *csr.CertificateRequest, keyFile string) (cert, csrPEM []byt
 
 	case *sm2.PrivateKey: //add sm2
 		isSM2 = true
-		sigAlgo = x509.SignatureAlgorithm(sm2.SM2WithSM3)
+		sigAlgo = x509.SignatureAlgorithm(signer.SignerAlgoSM2(nil))
 
 	default:
 		sigAlgo = x509.UnknownSignatureAlgorithm
